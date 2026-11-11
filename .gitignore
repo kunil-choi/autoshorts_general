@@ -14,6 +14,8 @@ build/
 installer/ffmpeg_bin/
 installer/ffmpeg-download.zip
 installer/ffmpeg-extract-tmp/
+default_assets/*
+!default_assets/README.txt
 client_secret.json
 youtube_token.json
 *.mp4
