@@ -1,0 +1,22 @@
+yt-dlp>=2024.8.6
+anthropic>=0.34.0
+fastapi>=0.112.0
+uvicorn[standard]>=0.30.0
+jinja2>=3.1.4
+httpx>=0.27.0
+python-multipart>=0.0.9
+python-dotenv>=1.0.1
+faster-whisper>=1.0.3
+# PyAV 14+ dropped the `metadata_errors` kwarg that faster-whisper's own
+# decode_audio() still passes to av.open() as of faster-whisper 1.2.1 (the
+# latest release at time of writing) - without this upper bound, pip
+# resolves av 19.x and every whisper transcription fails immediately with
+# "TypeError: open() got an unexpected keyword argument 'metadata_errors'".
+# Revisit this pin once faster-whisper ships a fix for the new PyAV API.
+av<14,>=11
+webvtt-py>=0.4.6
+opencv-python-headless>=4.9.0,<5
+Pillow>=10.0.0
+google-api-python-client>=2.100.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
