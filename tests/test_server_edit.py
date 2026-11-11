@@ -275,3 +275,20 @@ def test_edit_data_gives_the_youtube_video_id_for_the_original_span_player(env):
     client, _ = env
     job_id = _start(client)
     assert client.get(f"/edit-jobs/{job_id}/data").json()["video_id"] == "abcdefghijk"
+
+
+def test_company_logo_upload_preview_and_delete(env, tmp_path, monkeypatch):
+    import io
+    from PIL import Image
+    client, _ = env
+    monkeypatch.setattr(server, "DEFAULT_ASSETS_DIR", tmp_path / "assets")
+    buf = io.BytesIO(); Image.new("RGB", (40, 20), "red").save(buf, "JPEG")
+    assert not any(s["has_image"] for s in client.get("/assets").json())
+    assert client.post("/assets/logo_left", files={"file": ("l.jpg", buf.getvalue(), "image/jpeg")}).status_code == 200
+    assert {s["slot"]: s["has_image"] for s in client.get("/assets").json()}["logo_left"] is True
+    assert client.get("/assets/logo_left/image").status_code == 200
+    assert server._find_default_asset("logo_left").suffix == ".png"
+    assert client.post("/assets/logo_left", files={"file": ("x.txt", b"nope", "text/plain")}).status_code == 400
+    assert client.post("/assets/evil", files={"file": ("l.jpg", buf.getvalue(), "image/jpeg")}).status_code == 404
+    client.post("/assets/logo_left/delete")
+    assert client.get("/assets/logo_left/image").status_code == 404

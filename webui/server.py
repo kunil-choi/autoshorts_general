@@ -159,6 +159,61 @@ def auto_summary():
     return {"made_today": made_today, "edit_jobs": editjob.list_jobs(WORK_DIR), "recent_jobs": recent_auto}
 
 
+# ------------------------------------------------------------- 회사 로고 (default_assets)
+
+ASSET_SLOTS = {
+    "logo_left": "좌측 상단 로고",
+    "logo_right": "우측 상단 로고",
+    "banner_bottom": "중앙 하단 큰 로고",
+}
+
+
+@app.get("/assets")
+def assets_status():
+    return [
+        {"slot": slot, "label": label, "has_image": _find_default_asset(slot) is not None}
+        for slot, label in ASSET_SLOTS.items()
+    ]
+
+
+@app.get("/assets/{slot}/image")
+def asset_image(slot: str):
+    path = _find_default_asset(slot) if slot in ASSET_SLOTS else None
+    if path is None:
+        raise HTTPException(404, "등록된 로고가 없습니다.")
+    return FileResponse(path, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/assets/{slot}")
+async def asset_upload(slot: str, file: UploadFile):
+    """로고 이미지를 default_assets/<slot>.png로 저장한다 (이후 만드는 쇼츠부터 적용)."""
+    if slot not in ASSET_SLOTS:
+        raise HTTPException(404, "unknown slot")
+    from PIL import Image
+    try:
+        img = Image.open(file.file)
+        img.load()
+    except Exception:  # noqa: BLE001 - not an image
+        raise HTTPException(400, "이미지 파일(png/jpg)을 선택해 주세요.") from None
+    DEFAULT_ASSETS_DIR.mkdir(exist_ok=True)
+    _remove_asset(slot)
+    img.convert("RGBA").save(DEFAULT_ASSETS_DIR / f"{slot}.png")
+    return {"ok": True}
+
+
+def _remove_asset(slot: str) -> None:
+    for ext in (".png", ".jpg", ".jpeg"):
+        (DEFAULT_ASSETS_DIR / f"{slot}{ext}").unlink(missing_ok=True)
+
+
+@app.post("/assets/{slot}/delete")
+def asset_delete(slot: str):
+    if slot not in ASSET_SLOTS:
+        raise HTTPException(404, "unknown slot")
+    _remove_asset(slot)
+    return {"ok": True}
+
+
 # ------------------------------------------------------------- 작업 옵션
 
 TIER_KEYS = ("hook", "substantive", "keyword")

@@ -28,6 +28,10 @@
     #status.error { background: #fde2e2; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     td { padding: 6px 4px; border-bottom: 1px solid #eee; }
+    .logos { display: flex; gap: 12px; flex-wrap: wrap; }
+    .logo-slot { flex: 1 1 200px; border: 1px solid #d9dce3; border-radius: 8px; padding: 8px; font-size: 13px; }
+    .logo-slot .preview { height: 70px; margin: 6px 0; border-radius: 6px; background: #1f2937 center/contain no-repeat; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 12px; }
+    .logo-slot button { padding: 4px 10px; font-size: 12px; }
     td.err { color: #d97706; font-weight: 700; }
   </style>
 </head>
@@ -88,6 +92,9 @@
       <button type="button" id="btn-auto" class="auto" onclick="start('auto')" title="편집 없이 후보를 모두 만들어 비공개로 올립니다">⚡ 완전 자동</button>
     </div>
   </div>
+
+  <h2>🏢 회사 로고 <span class="hint">(만드는 쇼츠에 자동으로 들어갑니다 · 배경이 투명한 PNG 권장 · 지금부터 만드는 쇼츠에 적용)</span></h2>
+  <div class="logos" id="logos"></div>
 
   <h2>✂️ 진행 중인 단계별 작업 <span class="hint">(업로드까지 끝난 작업은 7일 뒤 자동 정리)</span></h2>
   <table id="edit-jobs"><tr><td class="hint">진행 중인 작업이 없습니다.</td></tr></table>
@@ -162,6 +169,32 @@
       }
     }
 
+    async function loadLogos() {
+      const slots = await (await fetch('/assets')).json();
+      const box = $('logos');
+      box.innerHTML = '';
+      slots.forEach(sl => {
+        const div = document.createElement('div');
+        div.className = 'logo-slot';
+        div.innerHTML = `<b>${esc(sl.label)}</b>
+          <div class="preview" ${sl.has_image ? `style="background-image:url('/assets/${sl.slot}/image?t=${Date.now()}')"` : ''}>${sl.has_image ? '' : '비어 있음'}</div>
+          <input type="file" accept="image/*" style="display:none">
+          <button type="button">${sl.has_image ? '교체' : '등록'}</button>
+          ${sl.has_image ? '<button type="button" class="ghost">삭제</button>' : ''}`;
+        const input = div.querySelector('input'), [up, del] = div.querySelectorAll('button');
+        up.addEventListener('click', () => input.click());
+        input.addEventListener('change', async () => {
+          if (!input.files[0]) return;
+          const f = new FormData(); f.set('file', input.files[0]);
+          const res = await fetch(`/assets/${sl.slot}`, { method: 'POST', body: f });
+          if (!res.ok) { let m = await res.text(); try { m = JSON.parse(m).detail || m; } catch (e) {} showError(m); }
+          loadLogos();
+        });
+        if (del) del.addEventListener('click', async () => { await fetch(`/assets/${sl.slot}/delete`, { method: 'POST' }); loadLogos(); });
+        box.appendChild(div);
+      });
+    }
+
     async function deleteJob(id) {
       if (!confirm('이 작업을 삭제할까요? 편집 내용과 만든 영상 파일이 지워집니다. (이미 올린 유튜브 영상은 그대로입니다)')) return;
       await fetch(`/edit-jobs/${id}/delete`, { method: 'POST' });
@@ -204,6 +237,7 @@
         });
       }
     }
+    loadLogos();
     loadSummary();
     setInterval(loadSummary, 15000);
   </script>
