@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>autoshorts 범용 - 자동 생성</title>
+  <style>
+    body { font-family: -apple-system, "Malgun Gothic", sans-serif; max-width: 820px; margin: 40px auto; padding: 0 16px; }
+    h2 { font-size: 15px; color: #444; margin: 26px 0 8px; }
+    p.hint { font-size: 13px; color: #666; margin: 4px 0 8px; }
+    .card { border: 1px solid #d9dce3; border-left: 5px solid #6d28d9; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+    .card .head { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+    .card .state { font-size: 13px; color: #555; margin-left: 6px; font-weight: 400; }
+    label { display: block; margin: 8px 0 2px; font-size: 13px; }
+    label.inline { display: inline-block; margin-right: 14px; }
+    input[type=text], input[type=number], select { box-sizing: border-box; padding: 7px 9px; border: 1px solid #b9bfcb; border-radius: 6px; }
+    input[type=text] { width: 100%; }
+    input[type=number] { width: 72px; }
+    .src-pane { margin-top: 6px; }
+    .tier { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; flex-wrap: wrap; }
+    .tier .name { min-width: 170px; }
+    .tier .desc { font-size: 12px; color: #666; }
+    .btns { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+    button { border: none; border-radius: 6px; padding: 8px 16px; font-size: 14px; cursor: pointer; color: white; background: #6d28d9; }
+    button.ghost { background: #fff; color: #444; border: 1px solid #b9bfcb; padding: 4px 10px; font-size: 12px; }
+    button.auto { background: #fff; color: #6d28d9; border: 1px solid #6d28d9; }
+    button:disabled { opacity: .5; cursor: default; }
+    #status { margin: 14px 0; padding: 10px; background: #f2f2f2; border-radius: 6px; display: none; }
+    #status.error { background: #fde2e2; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    td { padding: 6px 4px; border-bottom: 1px solid #eee; }
+    .logos { display: flex; gap: 12px; flex-wrap: wrap; }
+    .logo-slot { flex: 1 1 200px; border: 1px solid #d9dce3; border-radius: 8px; padding: 8px; font-size: 13px; }
+    .logo-slot .preview { height: 70px; margin: 6px 0; border-radius: 6px; background: #1f2937 center/contain no-repeat; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 12px; }
+    .logo-slot button { padding: 4px 10px; font-size: 12px; }
+    td.err { color: #d97706; font-weight: 700; }
+  </style>
+</head>
+<body>
+  {% set active = 'auto' %}{% include '_nav.html' %}
+
+  <div id="status"></div>
+
+  <div class="card">
+    <div class="head">🎞️ 새 쇼츠 만들기<span class="state" id="state-today"></span></div>
+    <p class="hint">영상에서 쇼츠로 올리기 좋은 구간을 AI가 찾아줍니다. 후보를 분석한 뒤 자막을 고치고 확인 영상을 본 다음에 올리는
+      <b>✂️ 편집 시작</b>이 기본이고, 편집 없이 끝까지 만들어 올리는 <b>⚡ 완전 자동</b>도 있습니다 (둘 다 유튜브에는 <b>비공개</b>로 올라갑니다).</p>
+
+    <h2>1. 영상 선택</h2>
+    <label class="inline"><input type="radio" name="src" value="url" checked onchange="toggleSrc()"> 유튜브 링크</label>
+    <label class="inline"><input type="radio" name="src" value="file" onchange="toggleSrc()"> 영상 원본 파일</label>
+    <div class="src-pane" id="pane-url">
+      <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=...">
+    </div>
+    <div class="src-pane" id="pane-file" style="display:none">
+      <input type="file" id="file" accept="video/*,.mp4,.mov,.mkv,.avi,.webm,.m4v">
+      <p class="hint">내 PC의 영상 파일을 그대로 쓰므로 화질 손실이 없고, 유튜브에 올리지 않은 영상도 만들 수 있습니다
+        (자막이 없어서 음성인식을 하므로 분석 시간이 조금 더 걸립니다).</p>
+    </div>
+
+    <h2>2. 후보 선정 기준</h2>
+    <div class="tier">
+      <label class="name"><input type="checkbox" id="t-hook" checked> 🎣 훅 위주</label>
+      <input type="number" id="n-hook" min="1" max="{{ max_tier_count }}" value="{{ tier_counts.hook }}">개
+      <span class="desc">첫 5초 안에 시선을 끄는 구간 (수치·반전·논쟁·웃긴 순간)</span>
+    </div>
+    <div class="tier">
+      <label class="name"><input type="checkbox" id="t-substantive" checked> 📌 핵심 정보 위주</label>
+      <input type="number" id="n-substantive" min="1" max="{{ max_tier_count }}" value="{{ tier_counts.substantive }}">개
+      <span class="desc">영상의 핵심 논지·데이터·결론을 담은 구간</span>
+    </div>
+    <div class="tier">
+      <label class="name"><input type="checkbox" id="t-keyword" onchange="toggleKeyword()"> 🔎 키워드</label>
+      <input type="number" id="n-keyword" min="1" max="{{ max_tier_count }}" value="{{ tier_counts.keyword }}">개
+      <span class="desc">내가 적은 키워드·주제와 관련된 발언만 골라냄</span>
+    </div>
+    <input type="text" id="keyword" placeholder="예: 금리 인상, 신제품 가격, 창업 실패담" style="display:none; margin-top:2px">
+
+    <h2>3. 쇼츠 길이</h2>
+    <select id="len" onchange="toggleLen()">
+      {% for preset in clip_length_presets %}
+      <option value="{{ preset.key }}" {% if preset.key == default_clip_length %}selected{% endif %}>{{ preset.label }}</option>
+      {% endfor %}
+      <option value="custom">사용자 지정 (초 단위)</option>
+    </select>
+    <span id="len-custom" style="display:none">
+      <input type="number" id="len-sec" min="{{ custom_min }}" max="{{ custom_max }}" value="90"> 초 이내
+      <span class="hint">({{ custom_min }}~{{ custom_max }}초)</span>
+    </span>
+
+    <div class="btns">
+      <button type="button" id="btn-edit" onclick="start('edit')">✂️ 편집 시작</button>
+      <button type="button" id="btn-auto" class="auto" onclick="start('auto')" title="편집 없이 후보를 모두 만들어 비공개로 올립니다">⚡ 완전 자동</button>
+    </div>
+  </div>
+
+  <h2>🖼️ 쇼츠에 넣을 이미지 <span class="hint">(선택 · 기본값은 없음 · 원하는 이미지를 등록하면 지금부터 만드는 쇼츠에 들어갑니다 · 배경이 투명한 PNG 권장)</span></h2>
+  <div class="logos" id="logos"></div>
+
+  <h2>✂️ 진행 중인 단계별 작업 <span class="hint">(업로드까지 끝난 작업은 7일 뒤 자동 정리)</span></h2>
+  <table id="edit-jobs"><tr><td class="hint">진행 중인 작업이 없습니다.</td></tr></table>
+
+  <h2>⚡ 완전 자동 실행 기록 <span class="hint">(앱을 다시 켜면 비워집니다)</span></h2>
+  <table id="recent"><tr><td class="hint">아직 실행 기록이 없습니다.</td></tr></table>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const srcType = () => document.querySelector('input[name=src]:checked').value;
+
+    function showError(msg) {
+      statusEl.style.display = 'block';
+      statusEl.classList.add('error');
+      statusEl.textContent = '오류: ' + msg;
+    }
+    function toggleSrc() {
+      $('pane-url').style.display = srcType() === 'url' ? '' : 'none';
+      $('pane-file').style.display = srcType() === 'file' ? '' : 'none';
+    }
+    function toggleKeyword() { $('keyword').style.display = $('t-keyword').checked ? '' : 'none'; }
+    function toggleLen() { $('len-custom').style.display = $('len').value === 'custom' ? '' : 'none'; }
+
+    // 화면의 선택값을 서버 폼으로. 검증 실패 시 사람이 읽을 메시지를 던진다.
+    function buildForm() {
+      const f = new FormData();
+      const type = srcType();
+      f.set('source_type', type);
+      if (type === 'url') {
+        const url = $('url').value.trim();
+        if (!url) throw new Error('유튜브 링크를 입력해 주세요.');
+        f.set('url', url);
+      } else {
+        const file = $('file').files[0];
+        if (!file) throw new Error('영상 원본 파일을 선택해 주세요.');
+        f.set('file', file);
+      }
+      const tiers = ['hook', 'substantive', 'keyword'].filter(t => $('t-' + t).checked);
+      if (!tiers.length) throw new Error('후보 선정 기준을 하나 이상 선택해 주세요.');
+      if (tiers.includes('keyword') && !$('keyword').value.trim()) throw new Error('키워드 기준을 쓰려면 키워드를 입력해 주세요.');
+      f.set('tiers', tiers.join(','));
+      f.set('keyword', $('keyword').value.trim());
+      ['hook', 'substantive', 'keyword'].forEach(t => f.set('count_' + t, $('n-' + t).value || '1'));
+      f.set('clip_length', $('len').value);
+      if ($('len').value === 'custom') f.set('custom_seconds', $('len-sec').value);
+      return f;
+    }
+
+    async function start(mode) {
+      let form;
+      try { form = buildForm(); } catch (err) { showError(err.message); return; }
+      if (mode === 'auto' && !confirm('편집 없이 후보를 모두 만들어 비공개로 업로드합니다. 진행할까요?')) return;
+      const uploading = srcType() === 'file';
+      statusEl.style.display = 'block';
+      statusEl.classList.remove('error');
+      statusEl.textContent = uploading ? '영상 파일을 불러오는 중... (용량이 크면 시간이 걸립니다)' : '작업을 시작합니다...';
+      $('btn-edit').disabled = $('btn-auto').disabled = true;
+      try {
+        const res = await fetch(mode === 'edit' ? '/edit-jobs' : '/auto-jobs', { method: 'POST', body: form });
+        if (!res.ok) {
+          let msg = await res.text();
+          try { msg = JSON.parse(msg).detail || msg; } catch (e) {}
+          throw new Error(msg);
+        }
+        const body = await res.json();
+        location.href = mode === 'edit' ? `/edit-jobs/${body.job_id}/view` : `/auto-jobs/${body.auto_job_id}/view`;
+      } catch (err) {
+        showError(err.message);
+        $('btn-edit').disabled = $('btn-auto').disabled = false;
+      }
+    }
+
+    async function loadLogos() {
+      const slots = await (await fetch('/assets')).json();
+      const box = $('logos');
+      box.innerHTML = '';
+      slots.forEach(sl => {
+        const div = document.createElement('div');
+        div.className = 'logo-slot';
+        div.innerHTML = `<b>${esc(sl.label)}</b>
+          <div class="preview" ${sl.has_image ? `style="background-image:url('/assets/${sl.slot}/image?t=${Date.now()}')"` : ''}>${sl.has_image ? '' : '비어 있음'}</div>
+          <input type="file" accept="image/*" style="display:none">
+          <button type="button">${sl.has_image ? '교체' : '등록'}</button>
+          ${sl.has_image ? '<button type="button" class="ghost">삭제</button>' : ''}`;
+        const input = div.querySelector('input'), [up, del] = div.querySelectorAll('button');
+        up.addEventListener('click', () => input.click());
+        input.addEventListener('change', async () => {
+          if (!input.files[0]) return;
+          const f = new FormData(); f.set('file', input.files[0]);
+          const res = await fetch(`/assets/${sl.slot}`, { method: 'POST', body: f });
+          if (!res.ok) { let m = await res.text(); try { m = JSON.parse(m).detail || m; } catch (e) {} showError(m); }
+          loadLogos();
+        });
+        if (del) del.addEventListener('click', async () => { await fetch(`/assets/${sl.slot}/delete`, { method: 'POST' }); loadLogos(); });
+        box.appendChild(div);
+      });
+    }
+
+    async function deleteJob(id) {
+      if (!confirm('이 작업을 삭제할까요? 편집 내용과 만든 영상 파일이 지워집니다. (이미 올린 유튜브 영상은 그대로입니다)')) return;
+      await fetch(`/edit-jobs/${id}/delete`, { method: 'POST' });
+      loadSummary();
+    }
+
+    async function loadSummary() {
+      const data = await (await fetch('/auto/summary')).json();
+      $('state-today').textContent = data.made_today > 0 ? `✅ 오늘 ${data.made_today}개 업로드` : '';
+
+      const jobs = $('edit-jobs');
+      if (data.edit_jobs.length) {
+        jobs.innerHTML = '';
+        data.edit_jobs.forEach(job => {
+          const tr = document.createElement('tr');
+          const prog = job.blocks_total
+            ? `확인 영상 ${job.blocks_rendered}/${job.blocks_total} · 업로드 ${job.blocks_uploaded}/${job.blocks_total}` : '';
+          tr.innerHTML = `<td>${job.source_type === 'file' ? '📁 파일' : '▶️ 유튜브'}</td><td>${esc(job.video_title)}</td>
+            <td class="${job.status === 'error' ? 'err' : ''}">${esc(job.stage)}${job.status === 'error' ? ' - ' + esc(job.message) : ''}</td>
+            <td>${prog}</td>
+            <td><a href="/edit-jobs/${job.id}/view">열기</a></td>
+            <td><button type="button" class="ghost">삭제</button></td>`;
+          tr.querySelector('button').addEventListener('click', () => deleteJob(job.id));
+          jobs.appendChild(tr);
+        });
+      } else {
+        jobs.innerHTML = '<tr><td class="hint">진행 중인 작업이 없습니다.</td></tr>';
+      }
+
+      const table = $('recent');
+      if (data.recent_jobs.length) {
+        table.innerHTML = '';
+        data.recent_jobs.forEach(job => {
+          const tr = document.createElement('tr');
+          const failed = job.status === 'error';
+          tr.innerHTML = `<td>${esc(job.video_title) || '(분석 중)'}</td>
+            <td class="${failed ? 'err' : ''}">${failed ? '❌ 실패' : job.status === 'done' ? '✅ 완료' : '⏳ ' + esc(job.status)}</td>
+            <td><a href="/auto-jobs/${job.id}/view">상세</a></td>`;
+          table.appendChild(tr);
+        });
+      }
+    }
+    loadLogos();
+    loadSummary();
+    setInterval(loadSummary, 15000);
+  </script>
+</body>
+</html>

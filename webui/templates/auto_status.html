@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>autoshorts - 자동 작업 상태</title>
+  <style>
+    body { font-family: -apple-system, "Malgun Gothic", sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 20px; }
+    #video-title { color: #444; margin-top: -8px; }
+    #overall { margin: 16px 0; padding: 10px; background: #f2f2f2; border-radius: 6px; }
+    #overall.error { background: #fde2e2; }
+    .item { border: 1px solid #ddd; border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+    .item .title { font-weight: 600; margin-bottom: 4px; }
+    .item .msg { font-size: 13px; color: #666; }
+    .item.done { border-color: #16a34a; background: #f0fdf4; }
+    .item.error { border-color: #dc2626; background: #fef2f2; }
+    .item a { color: #2563eb; word-break: break-all; }
+    a.home-link { display: inline-block; margin-top: 16px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  {% set active = 'auto' %}{% include '_nav.html' %}
+  <h1>🚀 완전 자동 작업 상태</h1>
+  <p id="video-title"></p>
+  <div id="overall">준비 중...</div>
+  <div id="items"></div>
+  <a class="home-link" href="/auto">← 자동 생성으로</a>
+
+  <script>
+    const autoJobId = {{ auto_job_id | tojson }};
+
+    function statusLabel(status) {
+      return {
+        pending: '대기 중',
+        building: '구간 추출 중',
+        rendering: '렌더링 중',
+        uploading: '유튜브 업로드 중',
+        done: '완료 (비공개 업로드됨)',
+        error: '오류',
+      }[status] || status;
+    }
+
+    async function poll() {
+      const res = await fetch(`/auto-jobs/${autoJobId}`);
+      const data = await res.json();
+
+      document.getElementById('video-title').textContent =
+        data.video_title || '';
+      const overall = document.getElementById('overall');
+      overall.textContent = data.message || data.status;
+      overall.classList.toggle('error', data.status === 'error');
+
+      const itemsEl = document.getElementById('items');
+      itemsEl.innerHTML = '';
+      (data.items || []).forEach((item, i) => {
+        const div = document.createElement('div');
+        div.className = 'item' + (item.status === 'done' ? ' done' : item.status === 'error' ? ' error' : '');
+        const link = item.youtube_url
+          ? `<a href="${item.youtube_url}" target="_blank" rel="noopener">${item.youtube_url}</a>`
+          : '';
+        div.innerHTML = `<div class="title">${i + 1}. ${item.title || ''}</div>
+          <div class="msg">${statusLabel(item.status)}${item.message ? ' - ' + item.message : ''}</div>
+          ${link}${item.status === 'done' && item.youtube_url ? ` · <a href="https://studio.youtube.com/video/${item.youtube_url.split('v=')[1] || item.youtube_url.split('/').pop()}/edit" target="_blank" rel="noopener">스튜디오에서 열기 (공개 전환)</a>` : ''}`;
+        itemsEl.appendChild(div);
+      });
+
+      if (data.status === 'done' || data.status === 'error') return;
+      setTimeout(poll, 2000);
+    }
+    poll();
+  </script>
+</body>
+</html>
